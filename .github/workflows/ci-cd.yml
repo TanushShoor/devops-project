@@ -49,27 +49,27 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build backend image
-        run: docker build -t ghcr.io/${{ github.repository_owner }}/study-planner-backend:${{ github.sha }} ./backend
+        run: docker build -t ghcr.io/tanushshoor/study-planner-backend:${{ github.sha }} ./backend
       - name: Build frontend image
-        run: docker build -t ghcr.io/${{ github.repository_owner }}/study-planner-frontend:${{ github.sha }} ./frontend
+        run: docker build -t ghcr.io/tanushshoor/study-planner-frontend:${{ github.sha }} ./frontend
       - name: Scan backend image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ghcr.io/${{ github.repository_owner }}/study-planner-backend:${{ github.sha }}
+          image-ref: ghcr.io/tanushshoor/study-planner-backend:${{ github.sha }}
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '1'
       - name: Scan frontend image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ghcr.io/${{ github.repository_owner }}/study-planner-frontend:${{ github.sha }}
+          image-ref: ghcr.io/tanushshoor/study-planner-frontend:${{ github.sha }}
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '1'
       - name: Push SHA-tagged images
         run: |
-          docker push ghcr.io/${{ github.repository_owner }}/study-planner-backend:${{ github.sha }}
-          docker push ghcr.io/${{ github.repository_owner }}/study-planner-frontend:${{ github.sha }}
+          docker push ghcr.io/tanushshoor/study-planner-backend:${{ github.sha }}
+          docker push ghcr.io/tanushshoor/study-planner-frontend:${{ github.sha }}
 
   deploy:
     if: github.ref == 'refs/heads/main' && vars.DEPLOY_TO_EKS == 'true'
@@ -94,5 +94,5 @@ jobs:
           helm upgrade --install study-planner ./helm/taskboard -n study-planner --create-namespace \
             --set backend.tag=${{ github.sha }} \
             --set frontend.tag=${{ github.sha }} \
-            --set backend.image=ghcr.io/${{ github.repository_owner }}/study-planner-backend \
-            --set frontend.image=ghcr.io/${{ github.repository_owner }}/study-planner-frontend
+            --set backend.image=ghcr.io/tanushshoor/study-planner-backend \
+            --set frontend.image=ghcr.io/tanushshoor/study-planner-frontend
