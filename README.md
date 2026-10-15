@@ -124,6 +124,8 @@ helm upgrade --install study-planner ./helm/taskboard \
   --set backend.tag="$IMAGE_TAG"
 ```
 
+After the commit's GitHub Actions run has passed and both GHCR packages are public, the same SHA-pinned deployment can be run with `./scripts/deploy-eks.sh`. It uses the `studyspace` AWS CLI profile by default; set `AWS_PROFILE`, `AWS_REGION`, `EKS_CLUSTER_NAME`, or `NAMESPACE` to override those defaults.
+
 For the classroom ingress config, install an ingress controller and Metrics Server, then use `helm/taskboard/values-dev.yaml`. Update your hosts file to point `studyspace.local` to the ingress address. Configure a real Kubernetes Secret for the PostgreSQL password before using a shared or public cluster; the chart's starter value is only for a disposable demo.
 
 ```bash
