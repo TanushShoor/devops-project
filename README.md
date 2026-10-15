@@ -77,6 +77,8 @@ The pipeline intentionally stops after publishing images. Deploy from your local
 
 Terraform in `terraform/` defines a VPC, public and private subnets, a NAT gateway, an EKS control plane, and managed worker nodes in `ap-southeast-2`. Terraform files are prepared for review; they do not create anything until you run `terraform apply`.
 
+Use `scripts/terraform-aws.sh` for Terraform commands after `aws login`. It supplies credentials through AWS SDK `credential_process`, allowing the SDK to refresh short-lived credentials during long EKS operations without saving keys. IRSA is disabled because the student account's AWS Organizations policy denies OIDC provider creation; the capstone workloads do not require IRSA.
+
 You need an AWS account, AWS CLI v2.32.0 or newer, and Terraform installed. Sign in using the AWS console session without creating or sharing access keys:
 
 ```bash

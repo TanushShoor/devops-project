@@ -38,7 +38,10 @@ module "eks" {
   cluster_endpoint_public_access           = true
   enable_cluster_creator_admin_permissions = true
   authentication_mode                      = "API_AND_CONFIG_MAP"
-  enable_irsa                              = true
+  # The student AWS account's Organizations policy denies OIDC provider creation.
+  # Workloads in this capstone do not need IRSA, so keep the cluster deployable
+  # with the permissions available in the Free Plan account.
+  enable_irsa = false
 
   cluster_addons = {
     coredns    = { most_recent = true }
