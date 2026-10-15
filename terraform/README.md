@@ -17,22 +17,22 @@ aws sts get-caller-identity
 Review and save the plan before applying it. Take the requested AWS screenshots, deploy and demonstrate the app, then destroy the environment and verify that its resources are gone.
 
 ```bash
-terraform init
-terraform fmt -recursive
-terraform validate
-terraform plan -out=studyspace.tfplan
+terraform -chdir=terraform init
+terraform -chdir=terraform fmt -recursive
+terraform -chdir=terraform validate
+./scripts/terraform-aws.sh -chdir=terraform plan -out=studyspace.tfplan
 ```
 
 Review the plan before applying it. Apply only after confirming the AWS account is still on the Free plan and the resource list matches the project:
 
 ```bash
-terraform apply studyspace.tfplan
-aws eks update-kubeconfig --region ap-southeast-2 --name study-planner-eks
+./scripts/terraform-aws.sh -chdir=terraform apply studyspace.tfplan
+aws eks update-kubeconfig --profile studyspace --region ap-southeast-2 --name study-planner-eks
 kubectl get nodes
 ```
 
 After the demo and screenshots, destroy the stack and verify completion:
 
 ```bash
-terraform destroy
+./scripts/terraform-aws.sh -chdir=terraform destroy
 ```

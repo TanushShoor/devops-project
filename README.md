@@ -88,25 +88,24 @@ aws sts get-caller-identity
 Copy `terraform/terraform.tfvars.example` to `terraform/terraform.tfvars` and adjust it if needed. Your console screenshot shows the AWS Free account plan. AWS says this plan does not incur charges while active; eligible usage consumes credits, and the account closes when credits are exhausted or the six-month period ends. EKS is listed among services available on the Free plan. Keep the account on the Free plan and do not choose “Upgrade plan”; if you later switch to Paid, usage beyond credits is billed. Monitor the credit balance and set a budget alert. EKS standard support is $0.10 per cluster-hour; worker nodes, a NAT gateway, storage, and load balancers add usage. Review [EKS pricing](https://aws.amazon.com/eks/pricing/), [VPC/NAT Gateway pricing](https://aws.amazon.com/vpc/pricing/), [Free plan terms](https://docs.aws.amazon.com/en_en/awsaccountbilling/latest/aboutv2/free-tier-plans.html), and the [Free plan service list](https://docs.aws.amazon.com/accounts/latest/reference/supported-services-sign-up-new.html) before applying. Keep the demo brief and destroy the resources after evidence is collected. Never put AWS keys or kubeconfig files in this repository.
 
 ```bash
-cd terraform
-terraform init
-terraform fmt -recursive
-terraform validate
-terraform plan -out=studyspace.tfplan
+terraform -chdir=terraform init
+terraform -chdir=terraform fmt -recursive
+terraform -chdir=terraform validate
+./scripts/terraform-aws.sh -chdir=terraform plan -out=studyspace.tfplan
 ```
 
 Review the complete plan and confirm the AWS console still shows the **Free plan** before applying. Apply only after we have reviewed the plan together:
 
 ```bash
-terraform apply studyspace.tfplan
-aws eks update-kubeconfig --region ap-southeast-2 --name study-planner-eks
+./scripts/terraform-aws.sh -chdir=terraform apply studyspace.tfplan
+aws eks update-kubeconfig --profile studyspace --region ap-southeast-2 --name study-planner-eks
 kubectl get nodes
 ```
 
 After deployment and screenshots, tear down the cloud resources and verify Terraform reports them destroyed:
 
 ```bash
-terraform destroy
+./scripts/terraform-aws.sh -chdir=terraform destroy
 ```
 
 ## Kubernetes and Helm
