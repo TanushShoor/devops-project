@@ -1,0 +1,10 @@
+frontend:
+  image: ghcr.io/YOUR_ORG/study-planner-frontend
+backend:
+  image: ghcr.io/YOUR_ORG/study-planner-backend
+replicaCount: 2
+ingress:
+  enabled: true
+  host: studyspace.example.com
+hpa:
+  enabled: true
