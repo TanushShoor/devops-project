@@ -156,14 +156,23 @@ helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheu
   --namespace monitoring --create-namespace \
   -f monitoring/prometheus-values.yaml
 
+INGRESS_HOST="$(kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')"
 helm upgrade --install study-planner ./helm/taskboard \
-  --namespace study-planner \
+  --namespace study-planner --create-namespace \
+  -f helm/taskboard/values-dev.yaml \
+  --set ingress.host="$INGRESS_HOST" \
   --set frontend.image=ghcr.io/tanushshoor/study-planner-frontend \
-  --set frontend.tag="$IMAGE_TAG" \
+  --set-string frontend.tag="$IMAGE_TAG" \
   --set backend.image=ghcr.io/tanushshoor/study-planner-backend \
-  --set backend.tag="$IMAGE_TAG" \
+  --set-string backend.tag="$IMAGE_TAG" \
   --set monitoring.serviceMonitor.enabled=true
+
+kubectl apply -f monitoring/grafana-studyspace-dashboard.yaml
 ```
+
+The monitoring values disable the unused Alertmanager and cap component resources for the two `t3.small` demo nodes. Prometheus keeps one day of in-memory data, so no EBS storage driver is needed. The ConfigMap provisions a **StudySpace API Overview** Grafana dashboard with request rate, p95 latency, 5xx response rate, and backend scrape health panels. The Grafana dashboard sidecar loads it automatically.
+
+For the app screenshot, open the hostname shown by `kubectl get ingress -n study-planner`. For Grafana, start `kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3001:80` and open `http://localhost:3001/d/studyspace-overview/studyspace-api-overview`. The username is `admin`; get the generated password with `kubectl get secret -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' | base64 --decode; echo`.
 
 ## Submission evidence checklist
 
