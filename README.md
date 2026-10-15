@@ -97,8 +97,8 @@ The chart is in `helm/taskboard/` (directory retained from the supplied starter)
 kubectl apply -f k8s/namespace.yaml
 helm upgrade --install study-planner ./helm/taskboard \
   --namespace study-planner --create-namespace \
-  --set frontend.image=ghcr.io/YOUR_GITHUB_OWNER/study-planner-frontend \
-  --set backend.image=ghcr.io/YOUR_GITHUB_OWNER/study-planner-backend
+  --set frontend.image=ghcr.io/tanushshoor/study-planner-frontend \
+  --set backend.image=ghcr.io/tanushshoor/study-planner-backend
 ```
 
 For the classroom ingress config, install an ingress controller and Metrics Server, then use `helm/taskboard/values-dev.yaml`. Update your hosts file to point `studyspace.local` to the ingress address. Configure a real Kubernetes Secret for the PostgreSQL password before using a shared or public cluster; the chart's starter value is only for a disposable demo.
