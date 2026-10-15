@@ -70,29 +70,3 @@ jobs:
         run: |
           docker push ghcr.io/tanushshoor/study-planner-backend:${{ github.sha }}
           docker push ghcr.io/tanushshoor/study-planner-frontend:${{ github.sha }}
-
-  deploy:
-    if: github.ref == 'refs/heads/main' && vars.DEPLOY_TO_EKS == 'true'
-    needs: build-scan-push
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: azure/setup-helm@v4
-      - name: Configure kubectl
-        env:
-          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
-        run: |
-          test -n "$KUBE_CONFIG_DATA" || { echo "KUBE_CONFIG_DATA is required when DEPLOY_TO_EKS=true"; exit 1; }
-          mkdir -p ~/.kube
-          echo "$KUBE_CONFIG_DATA" | base64 -d > ~/.kube/config
-          chmod 600 ~/.kube/config
-      - name: Deploy StudySpace with Helm
-        run: |
-          helm upgrade --install study-planner ./helm/taskboard -n study-planner --create-namespace \
-            --set backend.tag=${{ github.sha }} \
-            --set frontend.tag=${{ github.sha }} \
-            --set backend.image=ghcr.io/tanushshoor/study-planner-backend \
-            --set frontend.image=ghcr.io/tanushshoor/study-planner-frontend

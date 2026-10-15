@@ -17,6 +17,7 @@ coverage.xml
 .terraform/
 *.tfstate
 *.tfstate.*
+*.tfplan
 terraform.tfvars
 terraform.tfvars.json
 

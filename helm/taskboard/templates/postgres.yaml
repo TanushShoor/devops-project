@@ -32,11 +32,19 @@ spec:
         - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: taskboard-postgres, key: password}}}
         readinessProbe: {exec: {command: ["sh","-c","pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]}, initialDelaySeconds: 5, periodSeconds: 10}
         volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}]
-      volumes: [{name: data, persistentVolumeClaim: {claimName: taskboard-postgres-data}}]
+      volumes:
+      - name: data
+        {{- if .Values.postgres.persistence.enabled }}
+        persistentVolumeClaim: {claimName: taskboard-postgres-data}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
 ---
+{{- if .Values.postgres.persistence.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata: {name: taskboard-postgres-data}
 spec:
   accessModes: [ReadWriteOnce]
-  resources: {requests: {storage: 5Gi}}
+  resources: {requests: {storage: {{ .Values.postgres.persistence.size }}}}
+{{- end }}

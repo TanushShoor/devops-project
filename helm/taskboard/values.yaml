@@ -1,8 +1,8 @@
 frontend:
-  image: ghcr.io/YOUR_ORG/study-planner-frontend
+  image: ghcr.io/tanushshoor/study-planner-frontend
   tag: latest
 backend:
-  image: ghcr.io/YOUR_ORG/study-planner-backend
+  image: ghcr.io/tanushshoor/study-planner-backend
   tag: latest
 replicaCount: 2
 namespace: taskboard
@@ -12,6 +12,9 @@ postgres:
   database: studyplanner
   username: studyplanner
   password: change-me-before-deploy
+  persistence:
+    enabled: false
+    size: 5Gi
 ingress:
   enabled: false
   host: studyspace.local
@@ -25,4 +28,4 @@ resources:
   limits: {cpu: 500m, memory: 512Mi}
 monitoring:
   serviceMonitor:
-    enabled: true
+    enabled: false

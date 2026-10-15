@@ -8,7 +8,7 @@ StudySpace is a small full-stack app for keeping courses, assignments, prioritie
 - FastAPI REST API backed by PostgreSQL and SQLAlchemy.
 - Alembic database migration and isolated pytest API tests.
 - Dockerfiles and Docker Compose for a one-command local stack.
-- GitHub Actions CI/CD for tests, frontend build, image build, Trivy scan, GHCR publish, and optional Helm deployment.
+- GitHub Actions CI/CD for tests, frontend build, image build, Trivy scan, and GHCR publish; EKS deployment is run from the locally authenticated AWS CLI.
 - Terraform for an AWS VPC and EKS cluster.
 - Helm chart with frontend, backend, PostgreSQL, Ingress, HPA, and ServiceMonitor resources.
 - Prometheus/Grafana configuration and troubleshooting examples.
@@ -71,34 +71,57 @@ The workflow in `.github/workflows/ci-cd.yml` runs on pushes and pull requests t
 
 To use it, create a GitHub repository, push this project to its `main` branch, and enable Actions and package publishing. The workflow uses the repository-provided `GITHUB_TOKEN`; do not add a personal access token to the source. Set the two GHCR packages to public if the Kubernetes cluster will pull them without an image pull secret.
 
-The EKS deploy job is disabled by default. Enable it only after an EKS cluster is ready, by adding repository variable `DEPLOY_TO_EKS=true` and secret `KUBE_CONFIG_DATA` containing the base64 encoded kubeconfig. Keep credentials and kubeconfig out of Git.
+The pipeline intentionally stops after publishing images. Deploy from your local terminal after authenticating the AWS CLI and reviewing the cluster; this avoids storing AWS credentials or kubeconfig in GitHub. Once the pipeline is green, the Helm commands below use the exact SHA-tagged images for that revision.
 
 ## Terraform and AWS
 
 Terraform in `terraform/` defines a VPC, public and private subnets, a NAT gateway, an EKS control plane, and managed worker nodes in `ap-southeast-2`. Terraform files are prepared for review; they do not create anything until you run `terraform apply`.
 
-You need an AWS account, AWS CLI credentials with the required permissions, and Terraform installed. Copy `terraform/terraform.tfvars.example` to `terraform/terraform.tfvars` and adjust it if needed. An EKS cluster, EC2 worker nodes, and NAT gateway can incur charges. Check current AWS pricing and set a budget alert before applying. When you are done, run `terraform destroy` and verify the resources are gone. Never put AWS keys in this repository.
+You need an AWS account, AWS CLI v2.32.0 or newer, and Terraform installed. Sign in using the AWS console session without creating or sharing access keys:
+
+```bash
+aws login --profile studyspace --region ap-southeast-2
+export AWS_PROFILE=studyspace
+aws sts get-caller-identity
+```
+
+Copy `terraform/terraform.tfvars.example` to `terraform/terraform.tfvars` and adjust it if needed. Your console screenshot shows the AWS Free account plan. AWS says this plan does not incur charges while active; eligible usage consumes credits, and the account closes when credits are exhausted or the six-month period ends. EKS is listed among services available on the Free plan. Keep the account on the Free plan and do not choose “Upgrade plan”; if you later switch to Paid, usage beyond credits is billed. Monitor the credit balance and set a budget alert. EKS standard support is $0.10 per cluster-hour; worker nodes, a NAT gateway, storage, and load balancers add usage. Review [EKS pricing](https://aws.amazon.com/eks/pricing/), [VPC/NAT Gateway pricing](https://aws.amazon.com/vpc/pricing/), [Free plan terms](https://docs.aws.amazon.com/en_en/awsaccountbilling/latest/aboutv2/free-tier-plans.html), and the [Free plan service list](https://docs.aws.amazon.com/accounts/latest/reference/supported-services-sign-up-new.html) before applying. Keep the demo brief and destroy the resources after evidence is collected. Never put AWS keys or kubeconfig files in this repository.
 
 ```bash
 cd terraform
 terraform init
 terraform fmt -recursive
 terraform validate
-terraform plan
-terraform apply
+terraform plan -out=studyspace.tfplan
+```
+
+Review the complete plan and confirm the AWS console still shows the **Free plan** before applying. Apply only after we have reviewed the plan together:
+
+```bash
+terraform apply studyspace.tfplan
 aws eks update-kubeconfig --region ap-southeast-2 --name study-planner-eks
+kubectl get nodes
+```
+
+After deployment and screenshots, tear down the cloud resources and verify Terraform reports them destroyed:
+
+```bash
+terraform destroy
 ```
 
 ## Kubernetes and Helm
 
-The chart is in `helm/taskboard/` (directory retained from the supplied starter). It deploys the app and an in-cluster PostgreSQL database. A Kubernetes ingress controller and Metrics Server are required for Ingress and HPA behavior.
+The chart is in `helm/taskboard/` (directory retained from the supplied starter). It deploys the app and an in-cluster PostgreSQL database. The classroom chart uses temporary database storage; `values-prod.yaml` enables a 5 GiB persistent volume and therefore requires a working storage class such as the EBS CSI driver on EKS. A Kubernetes ingress controller and Metrics Server are required for Ingress and HPA behavior.
 
 ```bash
 kubectl apply -f k8s/namespace.yaml
+IMAGE_TAG="$(git rev-parse HEAD)"
 helm upgrade --install study-planner ./helm/taskboard \
   --namespace study-planner --create-namespace \
   --set frontend.image=ghcr.io/tanushshoor/study-planner-frontend \
-  --set backend.image=ghcr.io/tanushshoor/study-planner-backend
+  --set frontend.tag="$IMAGE_TAG" \
+  --set backend.image=ghcr.io/tanushshoor/study-planner-backend \
+  --set backend.tag="$IMAGE_TAG"
 ```
 
 For the classroom ingress config, install an ingress controller and Metrics Server, then use `helm/taskboard/values-dev.yaml`. Update your hosts file to point `studyspace.local` to the ingress address. Configure a real Kubernetes Secret for the PostgreSQL password before using a shared or public cluster; the chart's starter value is only for a disposable demo.
@@ -110,17 +133,33 @@ helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
 helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
 helm upgrade --install metrics-server metrics-server/metrics-server \
   --namespace kube-system
+
+helm upgrade --install study-planner ./helm/taskboard \
+  --namespace study-planner \
+  -f helm/taskboard/values-dev.yaml \
+  --set frontend.image=ghcr.io/tanushshoor/study-planner-frontend \
+  --set frontend.tag="$IMAGE_TAG" \
+  --set backend.image=ghcr.io/tanushshoor/study-planner-backend \
+  --set backend.tag="$IMAGE_TAG"
 ```
 
 ## Monitoring
 
-The backend exports Prometheus metrics at `/metrics`. `monitoring/prometheus-values.yaml` contains the Prometheus Operator setup, and the chart can create a ServiceMonitor. Install Prometheus/Grafana, confirm the StudySpace target is `UP`, and build a dashboard panel for request volume, latency, or errors. Metrics Server is separate and is used by the HPA.
+The backend exports Prometheus metrics at `/metrics`. `monitoring/prometheus-values.yaml` contains the Prometheus Operator setup, and the chart can create a ServiceMonitor. The ServiceMonitor is disabled by default so the app chart can install before the Prometheus Operator CRD exists. Install Prometheus/Grafana, then upgrade the app with `--set monitoring.serviceMonitor.enabled=true`; confirm the StudySpace target is `UP`, and build a dashboard panel for request volume, latency, or errors. Metrics Server is separate and is used by the HPA.
 
 ```bash
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
   --namespace monitoring --create-namespace \
   -f monitoring/prometheus-values.yaml
+
+helm upgrade --install study-planner ./helm/taskboard \
+  --namespace study-planner \
+  --set frontend.image=ghcr.io/tanushshoor/study-planner-frontend \
+  --set frontend.tag="$IMAGE_TAG" \
+  --set backend.image=ghcr.io/tanushshoor/study-planner-backend \
+  --set backend.tag="$IMAGE_TAG" \
+  --set monitoring.serviceMonitor.enabled=true
 ```
 
 ## Submission evidence checklist

@@ -1,7 +1,11 @@
 frontend:
-  image: ghcr.io/YOUR_ORG/study-planner-frontend
+  image: ghcr.io/tanushshoor/study-planner-frontend
 backend:
-  image: ghcr.io/YOUR_ORG/study-planner-backend
+  image: ghcr.io/tanushshoor/study-planner-backend
+postgres:
+  persistence:
+    enabled: true
+    size: 5Gi
 replicaCount: 2
 ingress:
   enabled: true
