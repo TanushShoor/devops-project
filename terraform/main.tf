@@ -51,7 +51,8 @@ module "eks" {
 
   eks_managed_node_groups = {
     main = {
-      instance_types = ["t3.medium"]
+      # t3.medium is rejected by Free Plan accounts; t3.small is Free Tier eligible.
+      instance_types = ["t3.small"]
       min_size       = 2
       max_size       = 4
       desired_size   = 2
