@@ -1,194 +1,276 @@
 # StudySpace — Student Study Planner
 
-StudySpace is a small full-stack app for keeping courses, assignments, priorities, and due dates in one place. It is the application for the Session 21 DevOps capstone. The project demonstrates a path from local development through container builds, CI security scanning, Kubernetes deployment, and monitoring.
+StudySpace is a full-stack web application that helps students keep track of courses and assignments in one place. Students can create assignments, choose a course, set a due date and priority, update progress, and review an overview of their workload. The project was built as a Session 21 DevOps capstone and demonstrates the path from a working application through automated testing, container builds, image security scanning, cloud deployment, and monitoring.
 
-## What it includes
+**Project status:** the local app can be run with Docker Compose. The AWS demo was deployed in `ap-southeast-2` to collect evidence and then destroyed; the EKS cluster, VPC, and load balancer are no longer running. Cloud screenshots below document that temporary deployment.
 
-- React + Vite responsive dashboard with course filters, deadlines, priorities, and assignment status.
-- FastAPI REST API backed by PostgreSQL and SQLAlchemy.
-- Alembic database migration and isolated pytest API tests.
-- Dockerfiles and Docker Compose for a one-command local stack.
-- GitHub Actions CI/CD for tests, frontend build, image build, Trivy scan, and GHCR publish; EKS deployment is run from the locally authenticated AWS CLI.
-- Terraform for an AWS VPC and EKS cluster.
-- Helm chart with frontend, backend, PostgreSQL, Ingress, HPA, and ServiceMonitor resources.
-- Prometheus/Grafana configuration and troubleshooting examples.
+**Source repository:** [TanushShoor/devops-project](https://github.com/TanushShoor/devops-project) · **Final successful CI run:** [StudySpace CI/CD run #14](https://github.com/TanushShoor/devops-project/actions/runs/38807499658)
 
-## Run the app locally
+## What the application does
 
-Install Docker Desktop (or Docker Engine with Compose) and Python 3.12+. Then from this directory run:
+- Shows an overview of assignment totals and work due soon.
+- Lets students create, view, update, and delete assignments.
+- Tracks assignment status as `TODO`, `IN_PROGRESS`, or `DONE`.
+- Supports `LOW`, `MEDIUM`, and `HIGH` priority.
+- Associates work with courses and due dates.
+- Exposes health, readiness, and Prometheus metrics endpoints for operations.
+
+The interface is built with React and Vite. It calls a FastAPI REST API; the API uses SQLAlchemy to store assignment data in PostgreSQL. Alembic manages database schema migrations.
+
+### Application screenshot
+
+![StudySpace planner dashboard running locally](evidence/01-local-app.png)
+
+The evidence capture shows the dashboard's initial empty state, ready for a student to add assignments.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  Student[Student browser] --> UI[React + Vite dashboard]
+  UI -->|REST /api| API[FastAPI]
+  API --> ORM[SQLAlchemy]
+  ORM --> DB[(PostgreSQL)]
+  API --> Health[/health and /ready/]
+  API --> Metrics[/metrics/]
+  API --> Migration[Alembic migrations]
+```
+
+In local development, Docker Compose starts the frontend, API, and PostgreSQL. In the cloud demo, Kubernetes Services routed traffic to the frontend and API pods, while an NGINX Ingress Load Balancer exposed the app. Prometheus scraped the backend metrics and Grafana displayed the API dashboard.
+
+## Technology and project structure
+
+| Area | Technologies and files |
+| --- | --- |
+| Frontend | React, Vite, NGINX unprivileged runtime in `frontend/` |
+| API | Python 3.12, FastAPI, SQLAlchemy in `backend/app/` |
+| Database | PostgreSQL, Alembic migrations in `backend/alembic/` |
+| Tests | pytest API tests in `backend/tests/` |
+| Local runtime | `docker-compose.yml` and service Dockerfiles |
+| CI and image security | `.github/workflows/ci-cd.yml`, Trivy, GitHub Container Registry |
+| Cloud infrastructure | Terraform VPC and EKS definitions in `terraform/` |
+| Kubernetes packaging | Helm chart in `helm/taskboard/`; namespace resources in `k8s/` |
+| Monitoring | Prometheus configuration and Grafana dashboard in `monitoring/` |
+| Evidence | Screenshots in `evidence/` |
+
+## Run the application locally
+
+### Requirements
+
+- Docker Desktop with Docker Compose
+- A browser
+
+From the repository root, start the entire stack:
 
 ```bash
 docker compose up --build
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The API docs are at [http://localhost:8000/docs](http://localhost:8000/docs); health, readiness, and metrics are at `/health`, `/ready`, and `/metrics` on port 8000.
+Open the frontend at [http://localhost:3000](http://localhost:3000). The FastAPI documentation is at [http://localhost:8000/docs](http://localhost:8000/docs). The backend exposes `/health`, `/ready`, and `/metrics` on port `8000`. Compose waits for the database and backend health checks before starting dependent services; the backend applies its Alembic migration during startup.
 
-Stop the app with `Ctrl+C`, or run `docker compose down`. To remove the local database volume as well, run `docker compose down -v`.
+The services use these local ports:
 
-## API
+| Service | Local address |
+| --- | --- |
+| StudySpace frontend | `http://localhost:3000` |
+| FastAPI | `http://localhost:8000` |
+| PostgreSQL | `localhost:5432` |
+
+To stop the containers, press `Ctrl+C` in the Compose terminal or run:
+
+```bash
+docker compose down
+```
+
+To remove the local PostgreSQL data volume as well, run `docker compose down -v`.
+
+### Docker Compose evidence
+
+The first capture shows the stack starting; the second shows the running containers.
+
+<p align="center">
+  <img src="evidence/03-compose-startup.png" alt="Docker Compose building and starting StudySpace" width="48%">
+  <img src="evidence/04-compose-containers.png" alt="StudySpace Compose containers" width="48%">
+</p>
+
+## API overview
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/assignments` | List assignments ordered by due date |
-| GET | `/api/assignments/{id}` | Fetch one assignment |
-| POST | `/api/assignments` | Create an assignment |
-| PUT | `/api/assignments/{id}` | Update an assignment |
-| DELETE | `/api/assignments/{id}` | Delete an assignment |
-| GET | `/api/assignments/stats` | Return counts by status and due soon |
+| `GET` | `/api/assignments` | List assignments, ordered by due date |
+| `GET` | `/api/assignments/{id}` | Fetch one assignment |
+| `POST` | `/api/assignments` | Create an assignment |
+| `PUT` | `/api/assignments/{id}` | Update an assignment |
+| `DELETE` | `/api/assignments/{id}` | Delete an assignment |
+| `GET` | `/api/assignments/stats` | Return assignment status counts and due-soon totals |
+| `GET` | `/health` | Liveness check |
+| `GET` | `/ready` | Database readiness check |
+| `GET` | `/metrics` | Prometheus metrics |
 
-Valid statuses are `TODO`, `IN_PROGRESS`, and `DONE`; priorities are `LOW`, `MEDIUM`, and `HIGH`. `/health` is the liveness endpoint, `/ready` checks database access, and `/metrics` exposes Prometheus metrics.
+## Run the backend tests
 
-## Tests and local development
-
-The backend tests use a temporary in-memory SQLite database, not the app database.
+The test suite uses a temporary in-memory SQLite database, so it does not read or modify the PostgreSQL database used by Docker Compose. Python 3.12 is required for the documented setup:
 
 ```bash
 cd backend
-python -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 pytest -v
 ```
 
-For standalone backend development, start PostgreSQL and set `DATABASE_URL` to a PostgreSQL URL, then run:
+The captured test run shows **6 passed**. Coverage includes health and root responses, assignment create/list/update/delete, statistics, and invalid-priority validation. The capture includes one non-failing Starlette/httpx deprecation warning.
 
-```bash
-alembic upgrade head
-uvicorn app.main:app --reload --port 8000
-```
+![Backend pytest run with all six tests passing](evidence/02-pytest.png)
 
-For the frontend, use Node.js 22 or newer:
+## Git, CI/CD, and container security
 
-```bash
-cd frontend
-npm ci
-npm run dev
-```
+The workflow in [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) runs on pull requests and pushes to `main`. It checks the backend with Python 3.12 and pytest, then builds the frontend with Node 22. A push to `main` also builds the backend and frontend container images, scans both images with Trivy, and publishes them to GitHub Container Registry (GHCR) tagged with the full source commit SHA.
 
-## GitHub Actions and GHCR
+The captured final run is green for commit `79d3c64ff7b39f73562a1e501609b2baf6e1423a`. The deployment to AWS is a separate, manually authenticated CLI step after CI; AWS credentials and kubeconfig are not stored in GitHub Actions or this repository.
 
-The workflow in `.github/workflows/ci-cd.yml` runs on pushes and pull requests to `main`. It runs pytest and builds the frontend first. On pushes, it builds both images, fails on unfixed HIGH or CRITICAL Trivy findings, then publishes images to GHCR tagged with the commit SHA.
+<p align="center">
+  <img src="evidence/05-github-commits.png" alt="StudySpace GitHub commit history" width="48%">
+  <img src="evidence/06-actions-green.png" alt="Successful GitHub Actions workflow" width="48%">
+</p>
 
-To use it, create a GitHub repository, push this project to its `main` branch, and enable Actions and package publishing. The workflow uses the repository-provided `GITHUB_TOKEN`; do not add a personal access token to the source. Set the two GHCR packages to public if the Kubernetes cluster will pull them without an image pull secret.
+### Trivy scanning and published images
 
-The pipeline intentionally stops after publishing images. Deploy from your local terminal after authenticating the AWS CLI and reviewing the cluster; this avoids storing AWS credentials or kubeconfig in GitHub. Once the pipeline is green, the Helm commands below use the exact SHA-tagged images for that revision.
+The workflow fails on unfixed HIGH or CRITICAL image findings. The captured backend and frontend Trivy reports each show zero vulnerabilities for those scanned images at that point in time. Both images were published to GHCR with commit-specific SHA tags:
 
-## Terraform and AWS
+- `ghcr.io/tanushshoor/study-planner-backend:<full-commit-sha>`
+- `ghcr.io/tanushshoor/study-planner-frontend:<full-commit-sha>`
 
-Terraform in `terraform/` defines a VPC, public and private subnets, a NAT gateway, an EKS control plane, and managed worker nodes in `ap-southeast-2`. Terraform files are prepared for review; they do not create anything until you run `terraform apply`.
+<p align="center">
+  <img src="evidence/07-trivy-scans.png" alt="Trivy scan jobs in the CI workflow" width="48%">
+  <img src="evidence/07%28a%29-trivy-scans.png" alt="Trivy backend image scan" width="48%">
+</p>
+<p align="center">
+  <img src="evidence/07%28b%29-trivy-scans.png" alt="Trivy frontend image scan" width="48%">
+  <img src="evidence/08-ghcr-images.png" alt="Backend and frontend packages in GHCR" width="48%">
+</p>
 
-Use `scripts/terraform-aws.sh` for Terraform commands after `aws login`. It supplies credentials through AWS SDK `credential_process`, allowing the SDK to refresh short-lived credentials during long EKS operations without saving keys. IRSA is disabled because the student account's AWS Organizations policy denies OIDC provider creation; the capstone workloads do not require IRSA.
+## AWS infrastructure with Terraform
 
-You need an AWS account, AWS CLI v2.32.0 or newer, and Terraform installed. Sign in using the AWS console session without creating or sharing access keys:
+Terraform created a VPC with two public and two private subnets and one NAT gateway, then provisioned the EKS control plane and managed worker nodes in `ap-southeast-2`. The demo used a two-node `t3.small` managed node group. IRSA was disabled because the student account's AWS Organizations policy blocked OIDC provider creation; the demo workloads did not require IRSA. The script [`scripts/terraform-aws.sh`](scripts/terraform-aws.sh) passes short-lived AWS CLI login credentials to Terraform through a credential process.
+
+The AWS resources have been destroyed after evidence collection. Screenshots below show the environment while it was live.
+
+The following two screenshots are post-apply Terraform checks; both show no remaining changes.
+
+<p align="center">
+  <img src="evidence/09-terraform-plan.png" alt="Post-apply Terraform plan showing no remaining changes" width="48%">
+  <img src="evidence/18-terraform-plan.png" alt="Additional post-apply Terraform plan check showing no remaining changes" width="48%">
+</p>
+
+**Terraform plan evidence note:** these are post-apply checks showing **No changes**. The original reviewed deployment plan was **4 to add, 0 to change, 0 to destroy**, but its non-empty output was not saved in the evidence folder.
+
+<p align="center">
+  <img src="evidence/10-aws-vpc-eks.png" alt="AWS console showing the live VPC and EKS cluster" width="48%">
+  <img src="evidence/vpc.png" alt="AWS VPC details" width="48%">
+</p>
+<p align="center">
+  <img src="evidence/eks.png" alt="AWS EKS cluster details" width="70%">
+</p>
+
+## Kubernetes and Helm deployment
+
+The Helm chart in [`helm/taskboard/`](helm/taskboard/) deploys the frontend and backend with two replicas each, PostgreSQL, ClusterIP Services, and an Ingress. In the captured cluster, Kubernetes scheduled the application pods, Services provided stable internal endpoints, and the Helm release recorded the deployed chart. The Ingress load balancer made the application reachable in a browser.
+
+<p align="center">
+  <img src="evidence/11-kubernetes-pods.png" alt="StudySpace Kubernetes pods running" width="48%">
+  <img src="evidence/12-kubernetes-services.png" alt="StudySpace Kubernetes Services" width="48%">
+</p>
+<p align="center">
+  <img src="evidence/13-helm-release.png" alt="StudySpace Helm release" width="48%">
+  <img src="evidence/14-ingress-app.png" alt="StudySpace loaded through Kubernetes Ingress" width="48%">
+</p>
+
+The AWS cluster and load balancer are no longer active, so the captured Ingress address is not a current app URL. To recreate the environment, install AWS CLI v2, Terraform, `kubectl`, and Helm, sign in to an AWS account, inspect the current account terms and billing, then review the Terraform plan before applying. Never commit access keys, session tokens, kubeconfig, Terraform state, or local plan files.
+
+The project used the following commands during provisioning:
 
 ```bash
 aws login --profile studyspace --region ap-southeast-2
-export AWS_PROFILE=studyspace
-aws sts get-caller-identity
-```
-
-Copy `terraform/terraform.tfvars.example` to `terraform/terraform.tfvars` and adjust it if needed. Your console screenshot shows the AWS Free account plan. AWS says this plan does not incur charges while active; eligible usage consumes credits, and the account closes when credits are exhausted or the six-month period ends. EKS is listed among services available on the Free plan. Keep the account on the Free plan and do not choose “Upgrade plan”; if you later switch to Paid, usage beyond credits is billed. Monitor the credit balance and set a budget alert. EKS standard support is $0.10 per cluster-hour; worker nodes, a NAT gateway, storage, and load balancers add usage. Review [EKS pricing](https://aws.amazon.com/eks/pricing/), [VPC/NAT Gateway pricing](https://aws.amazon.com/vpc/pricing/), [Free plan terms](https://docs.aws.amazon.com/en_en/awsaccountbilling/latest/aboutv2/free-tier-plans.html), and the [Free plan service list](https://docs.aws.amazon.com/accounts/latest/reference/supported-services-sign-up-new.html) before applying. Keep the demo brief and destroy the resources after evidence is collected. Never put AWS keys or kubeconfig files in this repository.
-
-```bash
-terraform -chdir=terraform init
-terraform -chdir=terraform fmt -recursive
-terraform -chdir=terraform validate
+aws sts get-caller-identity --profile studyspace
+./scripts/terraform-aws.sh -chdir=terraform init
+./scripts/terraform-aws.sh -chdir=terraform validate
 ./scripts/terraform-aws.sh -chdir=terraform plan -out=studyspace.tfplan
+./scripts/terraform-aws.sh -chdir=terraform show studyspace.tfplan
 ```
 
-Review the complete plan and confirm the AWS console still shows the **Free plan** before applying. Apply only after we have reviewed the plan together:
-
-```bash
-./scripts/terraform-aws.sh -chdir=terraform apply studyspace.tfplan
-aws eks update-kubeconfig --profile studyspace --region ap-southeast-2 --name study-planner-eks
-kubectl get nodes
-```
-
-After deployment and screenshots, tear down the cloud resources and verify Terraform reports them destroyed:
+Review the full plan and AWS billing/credit information before provisioning. After a cluster is available, connect `kubectl` and follow the deployment steps in [`scripts/deploy-eks.sh`](scripts/deploy-eks.sh). Destroy the resources after use:
 
 ```bash
 ./scripts/terraform-aws.sh -chdir=terraform destroy
 ```
 
-## Kubernetes and Helm
+The final destroy reported **58 resources destroyed**; the EKS cluster was verified absent and Terraform state was empty. The Kubernetes-created public load balancer and its security group were removed during cleanup as well.
 
-The chart is in `helm/taskboard/` (directory retained from the supplied starter). It deploys the app and an in-cluster PostgreSQL database. The classroom chart uses temporary database storage; `values-prod.yaml` enables a 5 GiB persistent volume and therefore requires a working storage class such as the EBS CSI driver on EKS. A Kubernetes ingress controller and Metrics Server are required for Ingress and HPA behavior.
+![Terraform destroy output confirming 58 resources removed](evidence/18-terraform-destroyed.png)
 
-```bash
-kubectl apply -f k8s/namespace.yaml
-IMAGE_TAG="$(git rev-parse HEAD)"
-helm upgrade --install study-planner ./helm/taskboard \
-  --namespace study-planner --create-namespace \
-  --set frontend.image=ghcr.io/tanushshoor/study-planner-frontend \
-  --set frontend.tag="$IMAGE_TAG" \
-  --set backend.image=ghcr.io/tanushshoor/study-planner-backend \
-  --set backend.tag="$IMAGE_TAG"
-```
+## Monitoring with Prometheus and Grafana
 
-After the commit's GitHub Actions run has passed and both GHCR packages are public, the same SHA-pinned deployment can be run with `./scripts/deploy-eks.sh`. It uses the `studyspace` AWS CLI profile by default; set `AWS_PROFILE`, `AWS_REGION`, `EKS_CLUSTER_NAME`, or `NAMESPACE` to override those defaults.
+The backend exposes metrics at `/metrics`. [`monitoring/prometheus-values.yaml`](monitoring/prometheus-values.yaml) configures the Prometheus Operator stack, while [`monitoring/grafana-studyspace-dashboard.yaml`](monitoring/grafana-studyspace-dashboard.yaml) provisions the StudySpace API Overview dashboard. Panels cover request rate, p95 latency, 5xx rate, and backend scrape health.
 
-For the classroom ingress config, install an ingress controller and Metrics Server, then use `helm/taskboard/values-dev.yaml`. Update your hosts file to point `studyspace.local` to the ingress address. Configure a real Kubernetes Secret for the PostgreSQL password before using a shared or public cluster; the chart's starter value is only for a disposable demo.
+The Prometheus capture shows both backend replicas `UP`. The Grafana capture shows request-rate data and backend health as `UP`; the p95 and 5xx panels have no samples in that capture.
 
-```bash
-helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
-  --namespace ingress-nginx --create-namespace
-helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
-helm upgrade --install metrics-server metrics-server/metrics-server \
-  --namespace kube-system
+<p align="center">
+  <img src="evidence/15-backend-metrics.png" alt="FastAPI Prometheus metrics endpoint" width="48%">
+  <img src="evidence/16-prometheus-target.png" alt="Prometheus backend scrape targets up" width="48%">
+</p>
+<p align="center">
+  <img src="evidence/17-grafana-dashboard.png" alt="Grafana StudySpace API Overview dashboard" width="70%">
+</p>
 
-helm upgrade --install study-planner ./helm/taskboard \
-  --namespace study-planner \
-  -f helm/taskboard/values-dev.yaml \
-  --set frontend.image=ghcr.io/tanushshoor/study-planner-frontend \
-  --set frontend.tag="$IMAGE_TAG" \
-  --set backend.image=ghcr.io/tanushshoor/study-planner-backend \
-  --set backend.tag="$IMAGE_TAG"
-```
-
-## Monitoring
-
-The backend exports Prometheus metrics at `/metrics`. `monitoring/prometheus-values.yaml` contains the Prometheus Operator setup, and the chart can create a ServiceMonitor. The ServiceMonitor is disabled by default so the app chart can install before the Prometheus Operator CRD exists. Install Prometheus/Grafana, then upgrade the app with `--set monitoring.serviceMonitor.enabled=true`; confirm the StudySpace target is `UP`, and build a dashboard panel for request volume, latency, or errors. Metrics Server is separate and is used by the HPA.
+For a running cluster, port-forward Grafana and Prometheus:
 
 ```bash
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
-  --namespace monitoring --create-namespace \
-  -f monitoring/prometheus-values.yaml
-
-INGRESS_HOST="$(kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')"
-helm upgrade --install study-planner ./helm/taskboard \
-  --namespace study-planner --create-namespace \
-  -f helm/taskboard/values-dev.yaml \
-  --set ingress.host="$INGRESS_HOST" \
-  --set frontend.image=ghcr.io/tanushshoor/study-planner-frontend \
-  --set-string frontend.tag="$IMAGE_TAG" \
-  --set backend.image=ghcr.io/tanushshoor/study-planner-backend \
-  --set-string backend.tag="$IMAGE_TAG" \
-  --set monitoring.serviceMonitor.enabled=true
-
-kubectl apply -f monitoring/grafana-studyspace-dashboard.yaml
+kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3001:80
+kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 19090:9090
 ```
 
-The monitoring values disable the unused Alertmanager and cap component resources for the two `t3.small` demo nodes. Prometheus keeps one day of in-memory data, so no EBS storage driver is needed. The ConfigMap provisions a **StudySpace API Overview** Grafana dashboard with request rate, p95 latency, 5xx response rate, and backend scrape health panels. The Grafana dashboard sidecar loads it automatically.
+Then open [Grafana](http://localhost:3001/d/studyspace-overview/studyspace-api-overview) and [Prometheus targets](http://localhost:19090/targets). Grafana's username is `admin`; retrieve its generated password with:
 
-For the app screenshot, open the hostname shown by `kubectl get ingress -n study-planner`. For Grafana, start `kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3001:80` and open `http://localhost:3001/d/studyspace-overview/studyspace-api-overview`. The username is `admin`; get the generated password with `kubectl get secret -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' | base64 --decode; echo`.
+```bash
+kubectl get secret -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' | base64 --decode; echo
+```
 
-## Submission evidence checklist
+These addresses work only while the cluster exists and the port-forward processes are running.
 
-Capture your own evidence after running each environment; screenshots and live account results cannot be produced from source files alone.
+## Submission and grading map
 
-- Browser screenshot of StudySpace running at `localhost:3000`.
-- `pytest -v` output showing the tests pass.
-- Docker Compose startup and running containers.
-- GitHub repository URL and meaningful commit history.
-- Successful GitHub Actions run and GHCR SHA-tagged package pages.
-- Trivy scan output for both images.
-- Terraform plan, AWS VPC/EKS view, and destroy completion.
-- Kubernetes pods/services, Helm release, and application through Ingress.
-- Backend `/metrics`, Prometheus target `UP`, and a populated Grafana panel.
-- Final walkthrough or recording explaining the pipeline and architecture.
+The project evidence is organized to match the rubric modules in [`GRADING.md`](GRADING.md):
 
-## Troubleshooting exercises
+| Rubric module | Implementation and evidence |
+| --- | --- |
+| M1 Application | `backend/app/`, `backend/alembic/`, `frontend/`, Compose, `01-local-app.png` |
+| M2 Testing | `backend/tests/`, pytest configuration, `02-pytest.png` (6 passed) |
+| M3 Git and GitHub | public repository, commit history and `05-github-commits.png` |
+| M4 Docker | service Dockerfiles, Compose, `03-compose-startup.png`, `04-compose-containers.png` |
+| M5 CI/CD | GitHub Actions workflow, successful run, SHA-tagged GHCR images |
+| M6 DevSecOps | Trivy scans of both images and GHCR evidence |
+| M7 Terraform | AWS VPC/EKS, plan checks and destroy evidence |
+| M8 Kubernetes + Helm | pods, Services, Helm release and Ingress evidence |
+| M9 Observability | backend metrics, Prometheus targets and Grafana dashboard |
+| M10 Presentation + docs | this README and `StudySpace-DevOps-Capstone.pptx` |
 
-The deliberately broken manifests under `troubleshooting/` are for practice. They are not included in the StudySpace chart. Compare their image and service configuration with the working Helm templates when practicing diagnosis.
+The 27-slide PowerPoint includes the project evidence screenshots in the corresponding sections. A PDF export is included for convenient viewing.
+
+## Repository layout
+
+```text
+backend/          FastAPI application, Alembic migrations, and pytest tests
+frontend/         React + Vite application and unprivileged multi-stage Dockerfile
+helm/             Kubernetes application chart
+k8s/              Namespace manifest
+monitoring/       Prometheus configuration and Grafana dashboard provisioning
+terraform/        AWS VPC and EKS infrastructure
+scripts/          AWS credential bridge and deployment helpers
+troubleshooting/  Deliberately broken manifests for practice
+evidence/         Screenshots documenting the capstone workflow
+```
+
+## Security and credentials
+
+Do not commit `.env` files, AWS credentials, session tokens, kubeconfig, Terraform state, or local Terraform plans. The repository `.gitignore` excludes these local files. The Terraform code does not provision infrastructure until an operator reviews and applies a plan.
