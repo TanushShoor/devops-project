@@ -4,6 +4,8 @@ Welcome to my DevOps Project - StudySpace Repository\
 Name: Tanush Shoor \
 University: BITS Pilani, India
 
+Demo link: https://drive.google.com/file/d/1JZGC6OZO3buELy_GnZjdhoZjPKbLnHXr/view?usp=sharing 
+
 StudySpace is a full-stack web application that helps students keep track of courses and assignments in one place. Students can create assignments, choose a course, set a due date and priority, update progress, and review an overview of their workload. The project was built as a Session 21 DevOps capstone and demonstrates the path from a working application through automated testing, container builds, image security scanning, cloud deployment, and monitoring.
 
 **Project status:** the local app can be run with Docker Compose. The AWS demo was deployed in `ap-southeast-2` to collect evidence and then destroyed; the EKS cluster, VPC, and load balancer are no longer running. Cloud screenshots below document that temporary deployment.
